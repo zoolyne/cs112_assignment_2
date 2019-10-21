@@ -1,0 +1,295 @@
+
+**Part1**
+
+#generate values of a dependent variable using a linear equation
+y = -0.072*(239:1237) + 310.9 + rnorm(998, 0, 14.3)
+
+#create a dataframe for the Dependent and Independent Variables
+bingo = data.frame("Independent" = 239:1237, "Depedent" = y)
+
+
+
+reg1 <- lm(Dependent ~ Independent, data = bingo)
+summary(reg1)
+
+
+library(ggplot)
+ggplot(data = bingo)+
+  geom_point(mapping = aes(Independent, Dependent), color = "indianred3")+
+  geom_abline(slope = -0.073302, intercept = 311.755327, color = "indianred4", size = 1.2)+
+  labs(title = "Bingo Dataset and Regression without Outliers")
+
+
+
+bingo2 <- rbind(c(238, 0), bingo, c(1238, 12807))
+
+reg2 <- lm(Dependent ~ Independent, data = bingo2)
+summary(reg2)
+
+
+
+ggplot(bingo2)+
+  geom_point(mapping = aes(Independent, Dependent),color = "slateblue2")+
+  geom_abline(intercept = 2.672e+02, slope = 3.749e-03, color = "slateblue4", size = 1.1)+
+  labs(title = "Bingo Dataset and Regression With Outliers")
+
+
+
+ggplot(bingo)+
+  geom_point(mapping = aes(Independent, Dependent), color = "olivedrab2")+
+  geom_abline(aes(intercept = 311.755327, slope = -0.073302, color = "Without Outliers"), size = 1.2, show.legend = TRUE)+
+  geom_abline(aes(intercept =2.672e+02, slope = 3.749e-03, color = "With Outliers"), size = 1.2, show.legend = TRUE)+
+  labs(title = "Regression Lines With and Without Outliers" )+
+  scale_colour_manual("", 
+                      breaks = c("With Outliers", "Without Outliers"),
+                      values = c("orange4", "olivedrab4"))
+
+
+
+
+
+**Problem 2**
+
+
+#import the datset
+#install.packages("Matching")
+library(Matching)
+library(arm)
+data(lalonde)
+
+
+
+#linear regression on the lalonde data set
+lreg1 <- lm(re78 ~ age + age^2 + treat + treat*age + educ + re74 + re75, data = lalonde)
+
+
+
+#create 10000 simulations of our regression
+lalonde.sim <- sim(lreg1, n.sims = 10000)
+
+
+
+
+#Part A
+
+#For Loop Method
+
+#storage matrix to hold the expected values for each age in each simulated model
+lal.store = matrix(nrow = 10000, ncol = 39)
+
+#Loop through each simulated model and populate rows of the matrix with the ages 17 to 55
+for(i in 1:10000){
+
+lal.store[i,] <- lalonde.sim@coef[i,1] + lalonde.sim@coef[i,2] * 17:55 + lalonde.sim@coef[i,3] * 1 + lalonde.sim@coef[i,4] * mean(lalonde$educ) + lalonde.sim@coef[i,5]*mean(lalonde$re74) + lalonde.sim@coef[i,6]* mean(lalonde$re75) + lalonde.sim@coef[i,7]*17:55*1  
+  
+}
+
+
+
+#Matrix Multiplication Method
+
+# 7 X 39 matrix of mean people of ages 17-55
+meanperson = rbind(1,17:55,1, mean(lalonde$educ), mean(lalonde$re74), mean(lalonde$re75), 17:55) 
+
+# multiply 10000 X 7 simulated coefs with meanperson to obtain 10000 X 39 matrix of simulated people of each age
+A = lalonde.sim@coef %*% meanperson
+
+# Find 2.5 and 97.5 percentile of simulated re78 for each age
+A.data = data.frame("age" = 17:55,t(apply(X = A, MARGIN = 2, FUN = quantile, probs = c(0.025, 0.975))))
+A.data
+
+
+
+
+A.data2 = data.frame(A.data, "avg" = apply(X = A, MARGIN = 2, FUN = mean))
+
+
+ggplot(A.data2, aes(age, avg))+
+  geom_pointrange(aes(ymin = X2.5., ymax = X97.5., color = age))+
+  labs(title = "Confidence Intervals of Expected Re78 Recieving Treatment", x = "Age", y = "Re78", caption = "(Data from simulated regressions of the Lalonde dataset for treated individuals)")
+
+
+#Part B
+
+# 7 X 39 matrix of mean people of ages 17-55
+meanperson = rbind(1,17:55,0, mean(lalonde$educ), mean(lalonde$re74), mean(lalonde$re75), 0) 
+
+# multiply 10000 X 7 simulated coefs with meanperson to obtain 10000 X 39 matrix of simulated people of each age
+B = lalonde.sim@coef %*% meanperson
+
+# Find 2.5 and 97.5 percentile of simulated re78 for each age
+B.data = data.frame("age" = 17:55,t(apply(X = B, MARGIN = 2, FUN = quantile, probs = c(0.025, 0.975))))
+B.data
+
+
+
+B.data2 = data.frame(B.data, "avg" = apply(X = B, MARGIN = 2, FUN = mean))
+
+
+ggplot(B.data2, aes(age, avg))+
+  geom_pointrange(aes(ymin = X2.5., ymax = X97.5., color = age))+
+  labs(title = "Confidence Intervals of Expected Re78 NOT Recieving Treatment", x = "Age", y = "Re78", caption = "(Data from simulated regressions of the Lalonde dataset for individuals in the control group)")
+
+
+
+#Part C
+
+#find the treatment effect for each variable
+C = A - B
+
+#find the 2.5 and 97.5 percentile of the treatment effect for each age
+C.data = data.frame("age" = 17:55,t(apply(X = C, MARGIN = 2, FUN = quantile, probs = c(0.025, 0.975))))
+C.data
+
+
+
+C.data2 = data.frame(C.data, "avg" = apply(X = C, MARGIN = 2, FUN = mean))
+
+ggplot(C.data2, aes(age, avg))+
+  geom_pointrange(aes(ymin = X2.5., ymax = X97.5., color = age))+
+  labs(title = "Confidence Intervals of Expected Treatment Effect", x = "Age", y = "Treatment Effect", caption = "(Data from simulated regressions of the Lalonde dataset)")
+
+
+
+#Part D
+
+
+# 7 X 39 matrices of median people of ages 17-55
+medianperson = rbind(1,17:55,0, median(lalonde$educ), median(lalonde$re74), median(lalonde$re75), 0) 
+medianperson2 = rbind(1,17:55,0, median(lalonde$educ), median(lalonde$re74), median(lalonde$re75), 1) 
+
+# multiply 10000 X 7 simulated coefs with meanperson to obtain 10000 X 39 matrix of simulated people of each age
+Control = lalonde.sim@coef %*% medianperson
+Treatment = lalonde.sim@coef %*% medianperson2
+
+#add a matrix of sigmas to each simulated person matrix
+rnormmatrix = matrix(ncol = ncol(D), nrow = nrow(D), data = rnorm(length(Control), mean = mean(Control), sd = Control))
+Control2 = Control + rnormmatrix
+rnormmatrix2 = matrix(ncol = ncol(D), nrow = nrow(D), data = rnorm(length(Treatment), mean = mean(Treatment), sd = sd(Treatment)))
+Treatment2 = Treatment + rnormmatrix2
+
+#find the treatment effect
+D = Treatment2 - Control2
+
+#quantile doesn't like NAs, so we remove them from the treatment effect predicitons
+removes = which(is.na(E) == T)
+D2 = D[-removes,]
+
+#find the 2.5 and 97.5 percentile of the treatment effect for each age
+D.data = data.frame("age" = 17:55,t(apply(X = D2, MARGIN = 2, FUN = quantile, probs = c(0.025, 0.975), na.rm = T)))
+D.data
+
+D.data2 = data.frame(D.data, "avg" = apply(X = D2, MARGIN = 2, FUN = mean, na.rm = T))
+
+ggplot(D.data2, aes(age, avg))+
+  geom_pointrange(aes(ymin = X2.5., ymax = X97.5., color = age))+
+  labs(title = "Prediction Intervals of the Treatment Effect", x = "Age", y = "Treatment Effect")
+  
+
+
+
+
+**Problem 3**
+
+
+library(boot)
+afts <- read.csv(url("https://tinyurl.com/y2prc9xq"))
+
+	
+
+#linear model to predict math scores based on the treatment
+areg1 = lm(MATH_SCORE ~ TREATMENT, data = afterschool)
+
+#bootstrapping our model by sampling the dataset 
+#running a linear regression on the sample
+#and storing the value for the coefficient of treatment
+store = rep(0, 1000)
+for(i in 1:1000){
+  store[i] = coef(lm(MATH_SCORE∼TREATMENT, data=afterschool[sample(1:nrow(afterschool), nrow(afterschool),replace = TRUE),]))[2]
+}
+
+#a table with the 95% confidence interval for bootstrapping vs the formula
+rbind(quantile(store, probs = c(0.025, 0.975)), confint(areg1)[2,])
+
+
+
+
+
+hist(store, breaks = 15, main = "Bootstrapped Treatment Coefficients", xlab = "Coeffiecient", ylab = "Count")
+
+
+
+
+**Problem 4**
+
+
+
+#function that returns an r-squared value for a random sample of a given dataset
+rsquared = function(y.val, y.pred){
+  actual = sample(y.val, y.val, replace = TRUE)
+  prediction = sample(y.pred, y.pred, replace = TRUE)
+  return(1 - (sum((prediction - actual)^2)/sum((actual - mean(actual))^2)))
+
+
+#remove NA values from the dataset
+afs2 = afts[!is.na(afts$MATH_SCORE),]
+
+#compare the r-squared values from the bootstrap function and the regression
+summary(areg1)$r.sq
+rsquared(afs2$MATH_SCORE, predict(areg1))
+
+
+
+
+
+**Problem 5**
+
+
+#load the dataset
+news <- read.csv(url("https://tinyurl.com/yx8tqf3k"))
+set.seed(12345)
+test_set_rows <- sample(1:length(news$age), 2000, replace = FALSE)
+
+#five different linear models that predict the treatment variable
+nreg1 = glm(treat ~ .-re78, data = news[-test_set_rows,])
+nreg2 = glm(treat ~ . - re78, data = news[-test_set_rows,], family=binomial)
+nreg3 = glm(treat ~ age + education, data = news[-test_set_rows,], family = binomial)
+nreg4 = glm(treat ~ re74 + re75 + u74 + u75, data = news[-test_set_rows,], family = binomial)
+nreg5 = glm(treat ~ poly(education, 3), data = news[-test_set_rows,])
+
+
+
+
+
+#subset of data used for LOOCV
+train =news$treat[-test_set_rows]
+
+#leave one out cross validation function finds the mse
+#by finding the mse of the training set while leaving one
+#pair of values out of the summation
+loocv = function(data, regression, subset){
+  mean_sqrd = 0
+  for(i in length(subset)){
+    mean_sqrd = mean_sqrd + mean((subset[-i]-predict(regression, data)[-i])^2)
+  }
+  return(mean_sqrd/length(subset))
+}
+
+#vector of the errors for the regressions found by LOOCV
+loocv.errors = c(loocv(news[-test_set_rows,], nreg1, train),loocv(news[-test_set_rows,], nreg2, train),loocv(news[-test_set_rows,], nreg3, train),loocv(news[-test_set_rows,], nreg4, train),loocv(news[-test_set_rows,], nreg5, train))
+
+#function to find normal mse
+mse = function(data, regression, variable){
+  return(mean((variable-predict(regression, data))^2))
+}
+
+test = news$treat[test_set_rows]
+
+#vector of errors for the regressions found by normal mse
+reg.errors = c(mse(news[test_set_rows,], nreg1, test),mse(news[test_set_rows,], nreg2, test),mse(news[test_set_rows,], nreg3, test),mse(news[test_set_rows,], nreg4, test),mse(news[test_set_rows,], nreg5, test))
+
+data.frame("LOOCV" = loocv.errors, "Regression" = reg.errors)
+
+
+
+	
